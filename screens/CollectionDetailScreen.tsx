@@ -823,7 +823,22 @@ const CollectionDetailScreen: React.FC<CollectionDetailScreenProps> = ({ collect
   };
   
   const handleExportToDevice = () => {
-      const dataStr = JSON.stringify(collection, null, 2);
+      // Find all students referenced in this collection (either via included IDs or payments)
+      const referencedStudentIds = new Set<string>();
+      if (collection.includedStudentIds) {
+          collection.includedStudentIds.forEach(id => referencedStudentIds.add(id));
+      }
+      collection.payments.forEach(p => referencedStudentIds.add(p.studentId));
+
+      const referencedStudents = students.filter(s => referencedStudentIds.has(s.id));
+
+      const exportPackage = {
+          meta: { version: '1.0', type: 'treasapp_collection_export' },
+          collection: collection,
+          students: referencedStudents
+      };
+
+      const dataStr = JSON.stringify(exportPackage, null, 2);
       const blob = new Blob([dataStr], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');

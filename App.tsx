@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Screen, Collection, RemittedCollection, ArchivedCollection } from './types';
+import { Screen, Collection, RemittedCollection, ArchivedCollection, Student } from './types';
 import BottomNav from './components/BottomNav';
 import CollectionScreen from './screens/CollectionScreen';
 import RemittedScreen from './screens/RemittedScreen';
@@ -27,7 +27,7 @@ interface SettingsScreenProps {
 }
 
 const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
-    const { setStudents } = useStudents();
+    const { students, setStudents } = useStudents();
     const { collections, setCollections } = useCollections();
     const { setRemittedCollections } = useRemittedCollections();
     const { setArchivedCollections } = useArchivedCollections();
@@ -64,18 +64,67 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                 const result = event.target?.result as string;
                 const importedData = JSON.parse(result);
 
+                // Check version/type
+                const isExportPackage = importedData.meta && importedData.meta.type === 'treasapp_collection_export';
+                
+                let importedCollection: Collection;
+                let referencedStudents: Student[] = [];
+
+                if (isExportPackage) {
+                    importedCollection = importedData.collection;
+                    referencedStudents = importedData.students || [];
+                } else {
+                    // Legacy support: assume raw collection object
+                     importedCollection = importedData as Collection;
+                }
+
                 // Basic validation
-                if (!importedData.id || !importedData.name || !Array.isArray(importedData.payments)) {
+                if (!importedCollection.id || !importedCollection.name || !Array.isArray(importedCollection.payments)) {
                     throw new Error("Invalid collection file format.");
                 }
 
-                const importedCollection = importedData as Collection;
+                // --- Handle Student Mapping ---
+                // We need to map the imported student IDs to the local student IDs (by matching studentNo)
+                // If a student doesn't exist locally, create them.
+                const studentIdMap = new Map<string, string>(); // Old ID -> New/Local ID
+                const newStudentsToAdd: Student[] = [];
+
+                referencedStudents.forEach(impStudent => {
+                    const existingLocalStudent = students.find(s => s.studentNo === impStudent.studentNo);
+                    if (existingLocalStudent) {
+                        // Map old ID to existing local ID
+                        studentIdMap.set(impStudent.id, existingLocalStudent.id);
+                    } else {
+                        // Create new student
+                        const newStudentId = crypto.randomUUID();
+                        studentIdMap.set(impStudent.id, newStudentId);
+                        newStudentsToAdd.push({
+                            ...impStudent,
+                            id: newStudentId
+                        });
+                    }
+                });
+
+                // --- Update Collection Data with New Student IDs ---
                 
-                // Check for duplicates based on ID
+                // 1. Update includedStudentIds
+                if (importedCollection.includedStudentIds) {
+                    importedCollection.includedStudentIds = importedCollection.includedStudentIds.map(oldId => {
+                        // If we have a mapping, use it. If not (maybe legacy file didn't include student data), keep old ID.
+                        return studentIdMap.get(oldId) || oldId;
+                    });
+                }
+
+                // 2. Update payments
+                importedCollection.payments = importedCollection.payments.map(payment => ({
+                    ...payment,
+                    studentId: studentIdMap.get(payment.studentId) || payment.studentId
+                }));
+
+
+                // --- Handle Collection ID duplication ---
                 const existingIndex = collections.findIndex(c => c.id === importedCollection.id);
-                
                 if (existingIndex !== -1) {
-                     // If duplicate, generate a new ID and append (Imported) to name to allow import
                      importedCollection.id = Date.now().toString();
                      importedCollection.name = `${importedCollection.name} (Imported)`;
                      setCollections(prev => [...prev, importedCollection]);
@@ -83,6 +132,12 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                 } else {
                     setCollections(prev => [...prev, importedCollection]);
                     alert(`Collection "${importedCollection.name}" imported successfully.`);
+                }
+                
+                // Add new students if any
+                if (newStudentsToAdd.length > 0) {
+                    setStudents(prev => [...prev, ...newStudentsToAdd].sort((a, b) => a.studentName.localeCompare(b.studentName)));
+                    alert(`Also imported ${newStudentsToAdd.length} new students linked to this collection.`);
                 }
 
             } catch (error) {
