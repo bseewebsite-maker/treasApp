@@ -1,0 +1,5 @@
+{
+  "name": "TreasApp",
+  "description": "An offline mobile app for managing collections, tracking student payments, and managing funds. All data is stored locally on your device.",
+  "requestFramePermissions": []
+}

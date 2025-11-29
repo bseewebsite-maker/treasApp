@@ -1,0 +1,16 @@
+{
+  "name": "TreasApp",
+  "short_name": "TreasApp",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#3b82f6",
+  "description": "An offline mobile app for managing collections, tracking student payments, and managing funds. All data is stored locally on your device.",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
